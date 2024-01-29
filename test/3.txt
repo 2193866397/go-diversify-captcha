@@ -1,0 +1,109 @@
+package main
+
+import (
+	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/gif"
+	"math/rand"
+	"os"
+	"time"
+)
+
+const (
+	width        = 200
+	height       = 80
+	numFrames    = 4
+	frameWidth   = 50
+	frameHeight  = 80
+	fontSize     = 40
+	fontFilePath = "/path/to/your/font.ttf" // 替换为你的字体文件路径
+)
+
+func main() {
+	// 设置随机种子
+	rand.Seed(time.Now().UnixNano())
+
+	// 创建一张空白的GIF图像
+	g := gif.GIF{}
+
+	// 生成每一帧
+	for i := 0; i < numFrames; i++ {
+		frame := generateFrame()
+		g.Image = append(g.Image, frame)
+		g.Delay = append(g.Delay, 100) // 100ms延迟
+	}
+
+	// 保存GIF到文件
+	saveGIF(&g, "output.gif")
+}
+
+// 生成一个帧（包含一个随机数字）
+func generateFrame() *image.Paletted {
+	frame := image.NewPaletted(image.Rect(0, 0, frameWidth, frameHeight), color.Palette{color.White, color.Black})
+
+	// 生成随机数字
+	num := rand.Intn(10)
+
+	// 设置字体
+	font := getFont()
+
+	// 设置字体颜色
+	fontColor := color.Black
+
+	// 创建绘图上下文
+	drawContext := &font.Drawer{
+		Dst:  frame,
+		Src:  image.NewUniform(fontColor),
+		Face: truetype.NewFace(font, &truetype.Options{Size: fontSize}),
+		Dot:  fixed.P(5, 50),
+	}
+
+	// 在帧上绘制数字
+	drawContext.DrawString(strconv.Itoa(num))
+
+	return frame
+}
+
+// 保存GIF到文件
+func saveGIF(g *gif.GIF, filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	err = gif.EncodeAll(file, g)
+	if err != nil {
+		fmt.Println("Error encoding GIF:", err)
+		return
+	}
+
+	fmt.Println("GIF saved successfully!")
+}
+
+// 从字体文件中获取字体
+func getFont() *truetype.Font {
+	fontFile, err := os.Open(fontFilePath)
+	if err != nil {
+		fmt.Println("Error opening font file:", err)
+		os.Exit(1)
+	}
+	defer fontFile.Close()
+
+	fontData, err := ioutil.ReadAll(fontFile)
+	if err != nil {
+		fmt.Println("Error reading font file:", err)
+		os.Exit(1)
+	}
+
+	font, err := truetype.Parse(fontData)
+	if err != nil {
+		fmt.Println("Error parsing font file:", err)
+		os.Exit(1)
+	}
+
+	return font
+}

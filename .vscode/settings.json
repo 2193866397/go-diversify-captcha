@@ -1,0 +1,16 @@
+{
+    "go": {
+        "prefix": "/**",
+        "body": [
+          "/**",
+          " * @description $1",
+          " * @author $2 $3",
+          " * @export $4",
+          " * @param {$5} $6",
+          " * @return {$7} $8",
+          " */"
+        ],
+        "description": "注释规范-description:功能 -author:作者，联系方式 -export:对外导出为 -param:参数 -return:输出"
+      }
+    
+}

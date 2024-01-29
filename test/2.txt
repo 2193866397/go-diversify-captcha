@@ -1,0 +1,234 @@
+/**
+ * @description: 创建像素验证码画板（无背景：默认白色）
+ * @return {*}
+ */
+func (c *Captcha) CreateCaptchaDraw() *CaptchaPaletted {
+	// 获取配置的宽高
+	width := c.config.imageWidth
+	height := c.config.imageHeight
+	// 默认的颜色为白色
+	p := []color.Color{
+		color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0x00},
+	}
+	return NewCaptchaPaletted(image.Rect(0, 0, width, height), p)
+}
+
+/**
+ * @description: 创建有背景的像素验证码画板
+ * @param {[]color.Color} bg
+ * @return {*}
+ */
+func (c *Captcha) CreateCaptchaDrawWithBg(bg []color.RGBA) *CaptchaPaletted {
+	// 获取配置的宽高
+	width := c.config.imageWidth
+	height := c.config.imageHeight
+	// 默认的颜色为白色
+	p := []color.Color{
+		color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0x00},
+	}
+	for _, co := range bg {
+		p = append(p, co)
+	}
+	return NewCaptchaPaletted(image.Rect(0, 0, width, height), p)
+}
+
+func (c *Captcha) CreateCaptchaDrawWithSize(width, height int, bg []color.RGBA) *CaptchaPaletted {
+	// 默认的颜色为白色
+	p := []color.Color{
+		color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0x00},
+	}
+	for _, co := range bg {
+		p = append(p, co)
+	}
+	return NewCaptchaPaletted(image.Rect(0, 0, width, height), p)
+}
+
+/**
+ * @description: 创建有透明度的画板
+ * @param {bool} isAlpha
+ * @return {*}
+ */
+func (c *Captcha) CreateCanvas(isAlpha bool) (img *image.NRGBA) {
+	w := c.config.imageWidth
+	h := c.config.imageHeight
+	img = image.NewNRGBA(image.Rect(0, 0, w, h))
+	// 画背景
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if isAlpha {
+				img.Set(x, y, color.Alpha{A: uint8(0)})
+			} else {
+				img.Set(x, y, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+			}
+		}
+	}
+	return
+}
+
+/**
+ * @description: 绘制验证码图片
+ * @param {map[int]CharDot} dots
+ * @return {*}
+ */
+func (c *Captcha) DrawCaptchaImage(dots map[int]CharDot) (image.Image, error) {
+	return nil, nil
+}
+
+/**
+ * @description: 获取文字出现的点
+ * @param {string} context
+ * @param {int} padding
+ * @return {*}
+ */
+func (c *Captcha) genDots(context string, padding int) map[int]CharDot {
+	dots := make(map[int]CharDot) // 各个文字点位置
+	width := c.config.imageWidth
+	height := c.config.imageHeight
+	if padding > 0 {
+		width -= padding
+		height -= padding
+	}
+	strs := []rune(context)
+	for i := 0; i < len(strs); i++ {
+		str := strs[i]
+		// 随机角度
+		randAngle := c.getRandAngle()
+		// 随机颜色
+		randColor := utils.GetRandomColor()
+		// 随机文字大小
+		randFontSize := utils.GetRandBetween(c.config.fontCodeLen.Min, c.config.fontCodeLen.Max)
+		fontHeight := randFontSize
+		fontWidth := randFontSize
+		if utf8.RuneCountInString(string(str)) > 1 {
+			fontWidth = randFontSize * LenChineseChar(string(str))
+			if randAngle > 0 {
+				surplus := fontWidth - randFontSize
+				ra := randAngle % 90
+				pr := float64(surplus) / 90
+				h := math.Max(float64(ra)*pr, 1)
+				fontHeight = fontHeight + int(h)
+			}
+		}
+		_w := width / len(strs)
+		rd := math.Abs(float64(_w) - float64(fontWidth))
+		x := (i * _w) + utils.GetRandBetween(0, int(math.Max(rd, 1)))
+		x = int(math.Min(math.Max(float64(x), 10), float64(width-10-(padding*2))))
+		y := utils.GetRandBetween(10, height+fontHeight)
+		y = int(math.Min(math.Max(float64(y), float64(fontHeight+10)), float64(height+(fontHeight/2)-(padding*2))))
+		text := fmt.Sprintf("%s", str)
+
+		dot := CharDot{i, x, y, randFontSize, fontWidth, fontHeight, text, randAngle, randColor}
+		dots[i] = dot
+	}
+	return dots
+}
+
+/**
+ * @description: 绘制位点图验证码
+ * @param {CharDot} dot
+ * @param {[]color.RGBA} colorArr
+ * @param {color.Color} fc
+ * @return {*}
+ */
+func (c *Captcha) DrawStrImgToJepg(dot CharDot, colorArr []color.RGBA, fc color.Color) *CaptchaPaletted {
+	canvas := c.CreateCaptchaDrawWithSize(dot.Width, dot.Height, colorArr)
+	// 设置字体数据
+	fontFile := c.config.LoadFontByName(c.config.fontName)
+	dc := freetype.NewContext()
+	dc.SetDPI(float64(72))
+	dc.SetFont(fontFile)
+	dc.SetClip(canvas.Bounds())
+	dc.SetDst(canvas)
+
+	// 文字大小
+	dc.SetFontSize(float64(20))
+	dc.SetHinting(font.HintingFull)
+
+	// 文字颜色
+	fontColor := image.NewUniform(fc)
+	dc.SetSrc(fontColor)
+
+	// 画文本
+	text := fmt.Sprintf("%s", dot.Text)
+	pt := freetype.Pt(12, dot.Height-5) // 字出现的位置
+	_, err := dc.DrawString(text, pt)
+	if err != nil {
+		return nil
+	}
+	return canvas
+}
+
+/**
+ * @description: 绘制PNG格式的验证码
+ * @param {[]CharDot} dot
+ * @param {[]color.RGBA} colorArr
+ * @param {[]color.Color} fc
+ * @return {*}
+ */
+func (c *Captcha) DrawStrImgToPNG(context string) *image.RGBA {
+	dw := image.NewRGBA(image.Rect(0, 0, c.config.imageWidth, c.config.imageHeight))
+	bgColor := color.RGBA{255, 255, 255, 255}
+	draw.Draw(dw, dw.Bounds(), &image.Uniform{bgColor}, image.ZP, draw.Src)
+
+	fontFile := c.config.LoadFontByName(c.config.fontName)
+	dc := freetype.NewContext()
+	dc.SetDPI(float64(72))
+	dc.SetFont(fontFile)
+	dc.SetClip(dw.Bounds())
+	dc.SetDst(dw)
+
+	// 文字大小
+	dc.SetFontSize(float64(20))
+	dc.SetHinting(font.HintingFull)
+
+	// 文字颜色
+	fontColor := image.NewUniform(utils.RandDeepColor())
+	dc.SetSrc(fontColor)
+
+	fontWidth := c.config.imageWidth / len(context)
+
+	for i, s := range context {
+		fontSize := c.config.imageHeight * (rand.Intn(7) + 7) / 16
+		x := fontWidth*i + fontWidth/fontSize
+		y := c.config.imageHeight/2 + fontSize/2 - rand.Intn(c.config.imageHeight/16*3)
+		pt := freetype.Pt(x, y)
+		if _, err := dc.DrawString(string(s), pt); err != nil {
+			return nil
+		}
+	}
+	return dw
+}
+
+func (c *Captcha) DrawStrImgToGIF(context string, fc []color.Color) *CaptchaDraw {
+	return nil
+}
+
+/**
+ * @Description: 获取随机角度
+ * @receiver cc
+ * @return int
+ */
+func (c *Captcha) getRandAngle() int {
+	angles := []CodeLen{
+		{20, 35},
+		{35, 45},
+		{45, 60},
+		{1, 15},
+		{15, 30},
+		{30, 45},
+		{315, 330},
+		{330, 345},
+		{345, 359},
+		{290, 305},
+		{305, 325},
+		{325, 330},
+	}
+	anglesLen := len(angles)
+	index := utils.GetRandBetween(0, anglesLen)
+	if index >= anglesLen {
+		index = anglesLen - 1
+	}
+	angle := angles[index]
+	res := utils.GetRandBetween(angle.Min, angle.Max)
+	return res
+}
